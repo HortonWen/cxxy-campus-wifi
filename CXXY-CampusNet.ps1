@@ -433,108 +433,208 @@ function Show-Gui {
     Add-Type -AssemblyName System.Windows.Forms
     Add-Type -AssemblyName System.Drawing
 
+    $accent    = [System.Drawing.Color]::FromArgb(47, 107, 255)
+    $accentDk  = [System.Drawing.Color]::FromArgb(30, 86, 214)
+    $accentDk2 = [System.Drawing.Color]::FromArgb(24, 70, 180)
+    $body      = [System.Drawing.Color]::FromArgb(244, 246, 251)
+    $ink       = [System.Drawing.Color]::FromArgb(31, 41, 55)
+    $muted     = [System.Drawing.Color]::FromArgb(107, 114, 128)
+    $soft      = [System.Drawing.Color]::FromArgb(232, 240, 254)
+    $softDk    = [System.Drawing.Color]::FromArgb(214, 228, 250)
+    $green     = [System.Drawing.Color]::FromArgb(22, 163, 74)
+    $red       = [System.Drawing.Color]::FromArgb(220, 38, 38)
+    $border    = [System.Drawing.Color]::FromArgb(216, 222, 234)
+    $white     = [System.Drawing.Color]::White
+
+    $titleFont = New-Object System.Drawing.Font('Microsoft YaHei UI', 15, [System.Drawing.FontStyle]::Bold)
+    $boldFont  = New-Object System.Drawing.Font('Microsoft YaHei UI', 9, [System.Drawing.FontStyle]::Bold)
+    $baseFont  = New-Object System.Drawing.Font('Microsoft YaHei UI', 9)
+
     $form = New-Object System.Windows.Forms.Form
-    $form.Text = '成贤学院 Student_CX 校园网登录'
-    $form.ClientSize = New-Object System.Drawing.Size(430, 470)
+    $form.Text = '成贤校园网助手'
+    $form.ClientSize = New-Object System.Drawing.Size(460, 588)
     $form.StartPosition = 'CenterScreen'
     $form.FormBorderStyle = 'FixedSingle'
     $form.MaximizeBox = $false
+    $form.BackColor = $body
+    $form.Font = $baseFont
 
-    $font = New-Object System.Drawing.Font('Microsoft YaHei UI', 9)
-    $form.Font = $font
+    # 顶部标题栏
+    $header = New-Object System.Windows.Forms.Panel
+    $header.Location = New-Object System.Drawing.Point(0, 0)
+    $header.Size = New-Object System.Drawing.Size(460, 76)
+    $header.BackColor = $accent
+    $form.Controls.Add($header)
+
+    $lblTitle = New-Object System.Windows.Forms.Label
+    $lblTitle.Location = New-Object System.Drawing.Point(20, 14)
+    $lblTitle.AutoSize = $true
+    $lblTitle.Text = '成贤校园网助手'
+    $lblTitle.Font = $titleFont
+    $lblTitle.ForeColor = $white
+    $header.Controls.Add($lblTitle)
+
+    $lblSub = New-Object System.Windows.Forms.Label
+    $lblSub.Location = New-Object System.Drawing.Point(22, 49)
+    $lblSub.AutoSize = $true
+    $lblSub.Text = '东南大学成贤学院 · Student_CX 一键连接与自动认证'
+    $lblSub.Font = $baseFont
+    $lblSub.ForeColor = [System.Drawing.Color]::FromArgb(224, 234, 255)
+    $header.Controls.Add($lblSub)
+
+    # 设置卡片
+    $card = New-Object System.Windows.Forms.Panel
+    $card.Location = New-Object System.Drawing.Point(16, 92)
+    $card.Size = New-Object System.Drawing.Size(428, 208)
+    $card.BackColor = $white
+    $card.BorderStyle = 'FixedSingle'
+    $form.Controls.Add($card)
 
     $lblSsid = New-Object System.Windows.Forms.Label
-    $lblSsid.Location = New-Object System.Drawing.Point(18, 20)
-    $lblSsid.Size = New-Object System.Drawing.Size(100, 20)
+    $lblSsid.Location = New-Object System.Drawing.Point(16, 18)
+    $lblSsid.Size = New-Object System.Drawing.Size(80, 22)
     $lblSsid.Text = '无线信号名'
-    $form.Controls.Add($lblSsid)
+    $lblSsid.ForeColor = $ink
+    $lblSsid.Font = $baseFont
+    $card.Controls.Add($lblSsid)
 
     $txtSsid = New-Object System.Windows.Forms.TextBox
-    $txtSsid.Location = New-Object System.Drawing.Point(130, 17)
-    $txtSsid.Width = 250
+    $txtSsid.Location = New-Object System.Drawing.Point(100, 15)
+    $txtSsid.Size = New-Object System.Drawing.Size(306, 24)
+    $txtSsid.BorderStyle = 'FixedSingle'
+    $txtSsid.Font = $baseFont
     $txtSsid.Text = $Ssid
-    $form.Controls.Add($txtSsid)
+    $card.Controls.Add($txtSsid)
 
     $lblUser = New-Object System.Windows.Forms.Label
-    $lblUser.Location = New-Object System.Drawing.Point(18, 58)
-    $lblUser.Size = New-Object System.Drawing.Size(100, 20)
+    $lblUser.Location = New-Object System.Drawing.Point(16, 58)
+    $lblUser.Size = New-Object System.Drawing.Size(80, 22)
     $lblUser.Text = '门户账号'
-    $form.Controls.Add($lblUser)
+    $lblUser.ForeColor = $ink
+    $lblUser.Font = $baseFont
+    $card.Controls.Add($lblUser)
 
     $txtUser = New-Object System.Windows.Forms.TextBox
-    $txtUser.Location = New-Object System.Drawing.Point(130, 55)
-    $txtUser.Width = 250
-    $form.Controls.Add($txtUser)
+    $txtUser.Location = New-Object System.Drawing.Point(100, 55)
+    $txtUser.Size = New-Object System.Drawing.Size(306, 24)
+    $txtUser.BorderStyle = 'FixedSingle'
+    $txtUser.Font = $baseFont
+    $card.Controls.Add($txtUser)
 
     $lblPass = New-Object System.Windows.Forms.Label
-    $lblPass.Location = New-Object System.Drawing.Point(18, 96)
-    $lblPass.Size = New-Object System.Drawing.Size(100, 20)
+    $lblPass.Location = New-Object System.Drawing.Point(16, 98)
+    $lblPass.Size = New-Object System.Drawing.Size(80, 22)
     $lblPass.Text = '门户密码'
-    $form.Controls.Add($lblPass)
+    $lblPass.ForeColor = $ink
+    $lblPass.Font = $baseFont
+    $card.Controls.Add($lblPass)
 
     $txtPass = New-Object System.Windows.Forms.TextBox
-    $txtPass.Location = New-Object System.Drawing.Point(130, 93)
-    $txtPass.Width = 250
+    $txtPass.Location = New-Object System.Drawing.Point(100, 95)
+    $txtPass.Size = New-Object System.Drawing.Size(306, 24)
+    $txtPass.BorderStyle = 'FixedSingle'
     $txtPass.UseSystemPasswordChar = $true
-    $form.Controls.Add($txtPass)
+    $txtPass.Font = $baseFont
+    $card.Controls.Add($txtPass)
 
     $lblIsp = New-Object System.Windows.Forms.Label
-    $lblIsp.Location = New-Object System.Drawing.Point(18, 134)
-    $lblIsp.Size = New-Object System.Drawing.Size(100, 20)
+    $lblIsp.Location = New-Object System.Drawing.Point(16, 138)
+    $lblIsp.Size = New-Object System.Drawing.Size(80, 22)
     $lblIsp.Text = '出口线路'
-    $form.Controls.Add($lblIsp)
+    $lblIsp.ForeColor = $ink
+    $lblIsp.Font = $baseFont
+    $card.Controls.Add($lblIsp)
 
     $cmbIsp = New-Object System.Windows.Forms.ComboBox
-    $cmbIsp.Location = New-Object System.Drawing.Point(130, 131)
-    $cmbIsp.Width = 250
+    $cmbIsp.Location = New-Object System.Drawing.Point(100, 135)
+    $cmbIsp.Size = New-Object System.Drawing.Size(150, 24)
     $cmbIsp.DropDownStyle = 'DropDownList'
+    $cmbIsp.FlatStyle = 'Flat'
+    $cmbIsp.Font = $baseFont
     @('校园内网','中国电信','中国移动') | ForEach-Object { [void]$cmbIsp.Items.Add($_) }
     $cmbIsp.SelectedIndex = 0
-    $form.Controls.Add($cmbIsp)
+    $card.Controls.Add($cmbIsp)
 
     $chkSave = New-Object System.Windows.Forms.CheckBox
-    $chkSave.Location = New-Object System.Drawing.Point(130, 166)
-    $chkSave.Size = New-Object System.Drawing.Size(280, 20)
+    $chkSave.Location = New-Object System.Drawing.Point(16, 172)
+    $chkSave.Size = New-Object System.Drawing.Size(396, 22)
     $chkSave.Text = '本机加密保存密码（仅本人账户可解密）'
-    $form.Controls.Add($chkSave)
+    $chkSave.ForeColor = $muted
+    $chkSave.Font = $baseFont
+    $chkSave.BackColor = $white
+    $card.Controls.Add($chkSave)
 
+    # 主按钮
     $btnAuto = New-Object System.Windows.Forms.Button
-    $btnAuto.Location = New-Object System.Drawing.Point(18, 205)
-    $btnAuto.Size = New-Object System.Drawing.Size(190, 42)
+    $btnAuto.Location = New-Object System.Drawing.Point(16, 314)
+    $btnAuto.Size = New-Object System.Drawing.Size(208, 46)
     $btnAuto.Text = '连接并自动登录'
+    $btnAuto.Font = $boldFont
+    $btnAuto.FlatStyle = 'Flat'
+    $btnAuto.FlatAppearance.BorderSize = 0
+    $btnAuto.FlatAppearance.MouseOverBackColor = $accentDk
+    $btnAuto.FlatAppearance.MouseDownBackColor = $accentDk2
+    $btnAuto.BackColor = $accent
+    $btnAuto.ForeColor = $white
     $form.Controls.Add($btnAuto)
 
     $btnOpen = New-Object System.Windows.Forms.Button
-    $btnOpen.Location = New-Object System.Drawing.Point(222, 205)
-    $btnOpen.Size = New-Object System.Drawing.Size(190, 42)
+    $btnOpen.Location = New-Object System.Drawing.Point(240, 314)
+    $btnOpen.Size = New-Object System.Drawing.Size(204, 46)
     $btnOpen.Text = '只打开认证页面'
+    $btnOpen.Font = $boldFont
+    $btnOpen.FlatStyle = 'Flat'
+    $btnOpen.FlatAppearance.BorderSize = 0
+    $btnOpen.FlatAppearance.MouseOverBackColor = $softDk
+    $btnOpen.FlatAppearance.MouseDownBackColor = $softDk
+    $btnOpen.BackColor = $soft
+    $btnOpen.ForeColor = $accent
     $form.Controls.Add($btnOpen)
 
+    # 次按钮
+    function Set-SecondaryButton {
+        param($b, $x, $w, $text)
+        $b.Location = New-Object System.Drawing.Point($x, 372)
+        $b.Size = New-Object System.Drawing.Size($w, 36)
+        $b.Text = $text
+        $b.Font = $baseFont
+        $b.FlatStyle = 'Flat'
+        $b.FlatAppearance.BorderSize = 1
+        $b.FlatAppearance.BorderColor = $border
+        $b.FlatAppearance.MouseOverBackColor = [System.Drawing.Color]::FromArgb(238, 242, 248)
+        $b.FlatAppearance.MouseDownBackColor = [System.Drawing.Color]::FromArgb(226, 232, 240)
+        $b.BackColor = $white
+        $b.ForeColor = $ink
+        $form.Controls.Add($b)
+    }
+
     $btnCheck = New-Object System.Windows.Forms.Button
-    $btnCheck.Location = New-Object System.Drawing.Point(18, 258)
-    $btnCheck.Size = New-Object System.Drawing.Size(128, 34)
-    $btnCheck.Text = '检查网络状态'
-    $form.Controls.Add($btnCheck)
+    Set-SecondaryButton -b $btnCheck -x 16 -w 132 -text '检查网络状态'
 
     $btnSelf = New-Object System.Windows.Forms.Button
-    $btnSelf.Location = New-Object System.Drawing.Point(160, 258)
-    $btnSelf.Size = New-Object System.Drawing.Size(128, 34)
-    $btnSelf.Text = '自助服务'
-    $form.Controls.Add($btnSelf)
+    Set-SecondaryButton -b $btnSelf -x 158 -w 132 -text '自助服务'
 
     $btnClear = New-Object System.Windows.Forms.Button
-    $btnClear.Location = New-Object System.Drawing.Point(302, 258)
-    $btnClear.Size = New-Object System.Drawing.Size(110, 34)
-    $btnClear.Text = '清除保存'
-    $form.Controls.Add($btnClear)
+    Set-SecondaryButton -b $btnClear -x 300 -w 144 -text '清除保存'
+
+    $lblStatus = New-Object System.Windows.Forms.Label
+    $lblStatus.Location = New-Object System.Drawing.Point(18, 418)
+    $lblStatus.Size = New-Object System.Drawing.Size(424, 22)
+    $lblStatus.Text = '● 状态：尚未检测'
+    $lblStatus.Font = $boldFont
+    $lblStatus.ForeColor = $muted
+    $form.Controls.Add($lblStatus)
 
     $txtLog = New-Object System.Windows.Forms.TextBox
-    $txtLog.Location = New-Object System.Drawing.Point(18, 305)
-    $txtLog.Size = New-Object System.Drawing.Size(394, 145)
+    $txtLog.Location = New-Object System.Drawing.Point(16, 448)
+    $txtLog.Size = New-Object System.Drawing.Size(428, 124)
     $txtLog.Multiline = $true
     $txtLog.ReadOnly = $true
     $txtLog.ScrollBars = 'Vertical'
-    $txtLog.BackColor = [System.Drawing.Color]::White
+    $txtLog.BorderStyle = 'FixedSingle'
+    $txtLog.BackColor = $white
+    $txtLog.ForeColor = $ink
+    $txtLog.Font = $baseFont
     $form.Controls.Add($txtLog)
     $script:LogSink = $txtLog
 
@@ -544,23 +644,54 @@ function Show-Gui {
         $i = $cmbIsp.SelectedItem.ToString()
         if (-not $u -or -not $p) {
             Write-Log '请先填写门户账号和密码'
+            $lblStatus.Text = '● 请先填写账号密码'
+            $lblStatus.ForeColor = $red
             return
         }
         if ($chkSave.Checked) { [void](Save-Credential -User $u -Pass $p -Isp $i) }
-        [void](Invoke-AutoLogin -Ssid $txtSsid.Text.Trim() -User $u -Pass $p -Isp $i)
+        $lblStatus.Text = '● 正在连接并自动登录…'
+        $lblStatus.ForeColor = $accent
+        $ok = Invoke-AutoLogin -Ssid $txtSsid.Text.Trim() -User $u -Pass $p -Isp $i
+        if ($ok) {
+            $lblStatus.Text = '● 已认证，可正常上网'
+            $lblStatus.ForeColor = $green
+        } else {
+            $lblStatus.Text = '● 未完成登录，请查看下方日志'
+            $lblStatus.ForeColor = $red
+        }
     })
 
-    $btnOpen.Add_Click({ Open-PortalBrowser })
+    $btnOpen.Add_Click({
+        Open-PortalBrowser
+        $lblStatus.Text = '● 已打开认证页，请在浏览器中登录'
+        $lblStatus.ForeColor = $accent
+    })
 
     $btnCheck.Add_Click({
         $info = Get-WlanInfo
         Write-Log ('当前无线: ' + $(if ($info.Ssid) { $info.Ssid } else { '未连接' }) + ' / ' + $(if ($info.State) { $info.State } else { '未知' }))
-        if (Test-Online) { Write-Log '网络状态: 已通过认证，可以上网' } else { Write-Log '网络状态: 未认证或无法访问外网' }
+        if (Test-Online) {
+            Write-Log '网络状态: 已通过认证，可以上网'
+            $lblStatus.Text = '● 已通过认证，可正常上网'
+            $lblStatus.ForeColor = $green
+        } else {
+            Write-Log '网络状态: 未认证或无法访问外网'
+            $lblStatus.Text = '● 未认证，需要登录'
+            $lblStatus.ForeColor = $red
+        }
     })
 
-    $btnSelf.Add_Click({ Start-Process 'http://211.65.40.6:8080/Self' })
+    $btnSelf.Add_Click({
+        Start-Process 'http://211.65.40.6:8080/Self'
+        $lblStatus.Text = '● 已打开自助服务'
+        $lblStatus.ForeColor = $accent
+    })
 
-    $btnClear.Add_Click({ Clear-Credential })
+    $btnClear.Add_Click({
+        Clear-Credential
+        $lblStatus.Text = '● 已清除本机保存的登录信息'
+        $lblStatus.ForeColor = $muted
+    })
 
     $saved = Read-Credential
     if ($saved) {
@@ -570,8 +701,10 @@ function Show-Gui {
         if ($idx -ge 0) { $cmbIsp.SelectedIndex = $idx }
         $chkSave.Checked = $true
         Write-Log '已载入本机加密保存的登录信息'
+        $lblStatus.Text = '● 已载入本机保存的登录信息'
+        $lblStatus.ForeColor = $muted
     } else {
-        Write-Log '双击「连接并自动登录」开始；密码默认不保存'
+        Write-Log '填写账号密码后点「连接并自动登录」；密码默认不保存'
     }
 
     [void]$form.ShowDialog()

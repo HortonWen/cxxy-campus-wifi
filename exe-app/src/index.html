@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>成贤校园网助手</title>
+<style>
+  :root {
+    --bg: #0d1220;
+    --bg2: #141b2e;
+    --panel: rgba(255,255,255,0.055);
+    --panel-border: rgba(255,255,255,0.09);
+    --text: #eef2ff;
+    --muted: #8a94ad;
+    --accent: #4f8bff;
+    --accent2: #8a5cff;
+    --green: #34d399;
+    --red: #fb7185;
+    --amber: #fbbf24;
+    --input: rgba(255,255,255,0.06);
+    --input-border: rgba(255,255,255,0.12);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    font-family: "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", system-ui, sans-serif;
+    color: var(--text);
+    background:
+      radial-gradient(1200px 600px at 15% -10%, rgba(79,139,255,0.28), transparent 60%),
+      radial-gradient(1000px 500px at 110% 0%, rgba(138,92,255,0.22), transparent 55%),
+      linear-gradient(180deg, var(--bg) 0%, var(--bg2) 100%);
+    overflow: hidden;
+    user-select: none;
+  }
+  .app {
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+  .titlebar {
+    height: 46px;
+    display: flex;
+    align-items: center;
+    padding: 0 12px 0 16px;
+    cursor: default;
+  }
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    font-size: 13px;
+    color: var(--muted);
+    font-weight: 600;
+    letter-spacing: .2px;
+  }
+  .brand .dot {
+    width: 10px; height: 10px; border-radius: 50%;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    box-shadow: 0 0 12px rgba(79,139,255,0.8);
+  }
+  .winbtns { margin-left: auto; display: flex; gap: 6px; }
+  .winbtns button {
+    width: 34px; height: 28px;
+    border: 0; border-radius: 8px;
+    background: transparent; color: var(--muted);
+    font-size: 15px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: background .15s, color .15s;
+  }
+  .winbtns button:hover { background: rgba(255,255,255,0.08); color: var(--text); }
+  .winbtns button.close:hover { background: #e11d48; color: #fff; }
+
+  .content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding: 6px 26px 20px;
+    overflow: auto;
+  }
+  .hero { display: flex; align-items: center; gap: 16px; margin: 10px 0 22px; }
+  .hero .icon {
+    width: 62px; height: 62px; border-radius: 18px;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 10px 26px rgba(79,139,255,0.35);
+  }
+  .hero .icon svg { width: 34px; height: 34px; stroke: #fff; }
+  .hero h1 { font-size: 24px; font-weight: 700; letter-spacing: .2px; }
+  .hero p { font-size: 13.5px; color: var(--muted); margin-top: 4px; }
+
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--panel-border);
+    border-radius: 20px;
+    padding: 20px;
+    backdrop-filter: blur(14px);
+  }
+  .field { margin-bottom: 14px; }
+  .field label { display: block; font-size: 12.5px; color: var(--muted); margin-bottom: 7px; }
+  .field input, .field select {
+    width: 100%; height: 46px;
+    background: var(--input);
+    border: 1px solid var(--input-border);
+    border-radius: 13px;
+    color: var(--text);
+    font-size: 15px;
+    padding: 0 14px;
+    outline: none;
+    transition: border-color .18s, background .18s, box-shadow .18s;
+  }
+  .field input:focus, .field select:focus {
+    border-color: var(--accent);
+    background: rgba(255,255,255,0.08);
+    box-shadow: 0 0 0 3px rgba(79,139,255,0.18);
+  }
+  .field select option { background: #171f35; color: #eef2ff; }
+  .pw { position: relative; }
+  .pw input { padding-right: 46px; }
+  .pw .eye {
+    position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+    width: 34px; height: 30px; border: 0; background: transparent;
+    color: var(--muted); font-size: 16px; cursor: pointer;
+  }
+  .row2 { display: flex; gap: 12px; }
+  .row2 .field { flex: 1; }
+  .remember {
+    display: flex; align-items: center; gap: 9px;
+    font-size: 13px; color: var(--muted); margin: 2px 0 16px; cursor: pointer;
+  }
+  .remember input { width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; }
+
+  .primary, .secondary {
+    width: 100%; height: 50px;
+    border: 0; border-radius: 14px;
+    font-size: 16px; font-weight: 700;
+    cursor: pointer;
+    transition: transform .12s, box-shadow .2s, filter .2s;
+  }
+  .primary, .secondary { height: 54px; border-radius: 15px; }
+  .primary {
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    color: #fff;
+    box-shadow: 0 12px 28px rgba(79,139,255,0.32);
+  }
+  .primary:hover { filter: brightness(1.06); transform: translateY(-1px); }
+  .primary:active { transform: translateY(0); }
+  .primary:disabled { filter: grayscale(.4) opacity(.6); cursor: default; transform: none; }
+  .secondary {
+    background: rgba(255,255,255,0.07);
+    color: var(--text);
+    margin-top: 10px;
+    font-weight: 600;
+  }
+  .secondary:hover { background: rgba(255,255,255,0.11); }
+
+  .status {
+    display: flex; align-items: center; gap: 9px;
+    margin: 16px 0 10px;
+    font-size: 13.5px;
+    font-weight: 600;
+  }
+  .status .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); }
+  .status.busy .dot { background: var(--amber); animation: pulse 1s infinite; }
+  .status.ok .dot { background: var(--green); box-shadow: 0 0 10px rgba(52,211,153,0.7); }
+  .status.err .dot { background: var(--red); box-shadow: 0 0 10px rgba(251,113,133,0.7); }
+  @keyframes pulse { 50% { opacity: .35; } }
+
+  .log {
+    background: rgba(0,0,0,0.25);
+    border: 1px solid var(--panel-border);
+    border-radius: 14px;
+    flex: 1;
+    min-height: 120px;
+    overflow: auto;
+    padding: 12px 14px;
+    font-size: 12.5px;
+    line-height: 1.75;
+    color: var(--muted);
+    font-family: "Cascadia Mono", "Consolas", "Segoe UI", monospace;
+    user-select: text;
+  }
+  .log .t { color: #6b7ea8; margin-right: 6px; }
+  .log .ok { color: var(--green); }
+  .log .err { color: var(--red); }
+
+  .foot {
+    display: flex; gap: 8px; margin-top: 12px;
+  }
+  .foot button {
+    flex: 1; height: 34px;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid var(--panel-border);
+    border-radius: 10px;
+    color: var(--muted); font-size: 13px; cursor: pointer;
+    transition: background .15s, color .15s;
+  }
+  .foot button:hover { background: rgba(255,255,255,0.09); color: var(--text); }
+</style>
+</head>
+<body>
+  <div class="app">
+    <div class="titlebar" id="titlebar">
+      <div class="brand"><span class="dot"></span>成贤校园网助手</div>
+      <div class="winbtns">
+        <button id="min" title="最小化">&#8211;</button>
+        <button id="close" class="close" title="关闭">&#10005;</button>
+      </div>
+    </div>
+
+    <div class="content">
+      <div class="hero">
+        <div class="icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M5 12.55a11 11 0 0 1 14.08 0"></path>
+            <path d="M1.42 9a16 16 0 0 1 21.16 0"></path>
+            <path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path>
+            <line x1="12" y1="20" x2="12.01" y2="20"></line>
+          </svg>
+        </div>
+        <div>
+          <h1>连接 Student_CX</h1>
+          <p>东南大学成贤学院 · 一键连接与自动认证</p>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="field">
+          <label>无线信号名</label>
+          <input id="ssid" value="Student_CX" spellcheck="false">
+        </div>
+        <div class="row2">
+          <div class="field">
+            <label>门户账号（校园卡号）</label>
+            <input id="user" inputmode="numeric" spellcheck="false" autocomplete="off">
+          </div>
+          <div class="field">
+            <label>出口线路</label>
+            <select id="isp">
+              <option>校园内网</option>
+              <option>中国电信</option>
+              <option>中国移动</option>
+            </select>
+          </div>
+        </div>
+        <div class="field">
+          <label>门户密码</label>
+          <div class="pw">
+            <input id="pass" type="password" autocomplete="off">
+            <button class="eye" id="eye" title="显示/隐藏">&#128065;</button>
+          </div>
+        </div>
+        <label class="remember"><input type="checkbox" id="remember">本机加密保存密码（仅本人账户可解密）</label>
+
+        <button class="primary" id="login">连接并自动登录</button>
+        <button class="secondary" id="open">只打开认证页面</button>
+      </div>
+
+      <div class="status" id="status"><span class="dot"></span><span id="statusText">就绪</span></div>
+      <div class="log" id="log"></div>
+
+      <div class="foot">
+        <button id="check">检查网络</button>
+        <button id="self">自助服务</button>
+        <button id="clear">清除保存</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+  var v = (function(){
+    try { return window.chrome && window.chrome.webview ? window.chrome.webview : null; } catch(e){ return null; }
+  })();
+
+  function post(obj){ if (v) { v.postMessage(obj); } }
+
+  function $(id){ return document.getElementById(id); }
+  function now(){ var d = new Date(); function p(n){ return (n<10?'0':'')+n; } return p(d.getHours())+':'+p(d.getMinutes())+':'+p(d.getSeconds()); }
+  function log(msg, cls){
+    var el = $('log');
+    var line = document.createElement('div');
+    line.innerHTML = '<span class="t">['+now()+']</span><span class="'+(cls||'')+'"></span>';
+    line.lastChild.textContent = msg;
+    el.appendChild(line);
+    el.scrollTop = el.scrollHeight;
+  }
+  function status(cls, text){
+    var s = $('status');
+    s.className = 'status ' + cls;
+    $('statusText').textContent = text;
+  }
+
+  $('min').onclick = function(){ post({t:'win', c:'min'}); };
+  $('close').onclick = function(){ post({t:'win', c:'close'}); };
+
+  $('titlebar').addEventListener('pointerdown', function(e){
+    if (e.target && e.target.closest('.winbtns')) return;
+    post({t:'win', c:'startMove'});
+  });
+
+  $('eye').onclick = function(){
+    var p = $('pass');
+    p.type = (p.type === 'password') ? 'text' : 'password';
+  };
+
+  $('login').onclick = function(){
+    var user = $('user').value.trim();
+    var pass = $('pass').value;
+    if (!user || !pass) { status('err','请填写账号和密码'); log('请填写门户账号和密码','err'); return; }
+    $('login').disabled = true;
+    status('busy','正在连接并自动登录…');
+    post({ t:'autoLogin', ssid:$('ssid').value.trim(), user:user, pass:pass, isp:$('isp').value, remember:$('remember').checked });
+  };
+  $('open').onclick = function(){ post({t:'openPortal'}); };
+  $('check').onclick = function(){ status('busy','正在检查…'); post({t:'check'}); };
+  $('self').onclick = function(){ post({t:'openSelf'}); };
+  $('clear').onclick = function(){ post({t:'clear'}); log('已请求清除本机保存的登录信息'); };
+
+  if (v) {
+    v.addEventListener('message', function(ev){
+      var m = ev.data || {};
+      switch (m.t) {
+        case 'progress': log(m.m); break;
+        case 'status':
+          status(m.cls, m.text);
+          break;
+        case 'result':
+          $('login').disabled = false;
+          break;
+        case 'cred':
+          if (m.user) { $('user').value = m.user; $('pass').value = m.pass; $('isp').value = m.isp; $('remember').checked = true; log('已载入本机加密保存的登录信息'); }
+          break;
+        case 'cleared':
+          log('已清除本机保存的登录信息','ok');
+          break;
+      }
+    });
+    post({t:'load'});
+  } else {
+    log('未检测到 WebView2 环境');
+  }
+</script>
+</body>
+</html>

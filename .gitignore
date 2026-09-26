@@ -1,0 +1,9 @@
+# 构建产物与依赖
+exe-app/webview2-sdk/
+exe-app/*.nupkg
+exe-app/CXXYNet.exe
+
+# 系统文件
+Thumbs.db
+Desktop.ini
+.DS_Store
