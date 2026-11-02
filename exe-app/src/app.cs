@@ -78,6 +78,19 @@ namespace CXXYNet
     public class MainForm : Form
     {
         const string UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36";
+
+        // Dr.COM ePortal 网关（东南大学成贤学院）。
+        // 登录流程对齐计算机协会 SEUCXCS/wlan-auto-login 的 fix/windows-runtime 分支：
+        //   1) GET {StatusUrl}?callback=dr1&v=<毫秒时间戳>  -> 从网关拿到真实的 wlan_user_ip / mac / ac_ip / ac_name
+        //   2) GET {ActionUrl}?c=Portal&a=login&...         -> 用上面拿到的参数直接认证
+        // 关键：所有网关请求都必须 req.Proxy = null（绕过 Windows 系统代理），
+        // 否则开着 Clash/VPN 系统代理时，发给私有网关 172.18.254.6 的请求会被送进代理而失败。
+        const string DrcomStatusUrl = "http://172.18.254.6/drcom/chkstatus";
+        const string DrcomActionUrl = "http://172.18.254.6:801/eportal/";
+        const string DrcomCallback = "dr1";
+        const string DefaultAcIp = "172.18.255.6";
+        const string DefaultAcName = "NAS";
+
         WebView2 webView;
         JavaScriptSerializer json = new JavaScriptSerializer();
 
@@ -385,6 +398,37 @@ namespace CXXYNet
             catch { r.Success = false; r.FinalUrl = url; return r; }
         }
 
+        // 直连网关用：绕过 Windows 系统代理 + 不跟随跳转。
+        // 这是 Windows 上能成功的关键——开着系统代理(Clash/VPN)时，发往 172.18.254.6
+        // 的请求默认会被送进代理，从而连不上校园网网关。
+        HttpResult FetchRaw(string url, string referer = null, int timeoutMs = 8000)
+        {
+            HttpResult r = new HttpResult { Status = 0, FinalUrl = url, Body = "", Success = false };
+            try
+            {
+                var req = (HttpWebRequest)WebRequest.Create(url);
+                req.UserAgent = UA;
+                req.Timeout = timeoutMs;
+                req.ReadWriteTimeout = timeoutMs;
+                req.Proxy = null;               // 关键：绕过系统代理
+                req.AllowAutoRedirect = false;  // JSONP 响应不需要也不应该跳转
+                req.ServicePoint.Expect100Continue = false;
+                if (referer != null) req.Referer = referer;
+                try
+                {
+                    using (var resp = (HttpWebResponse)req.GetResponse())
+                        return ReadResponse(resp, url);
+                }
+                catch (WebException ex)
+                {
+                    var er = ex.Response as HttpWebResponse;
+                    if (er != null) return ReadResponse(er, url);
+                    r.Success = false; r.FinalUrl = url; return r;
+                }
+            }
+            catch { r.Success = false; r.FinalUrl = url; return r; }
+        }
+
         HttpResult ReadResponse(HttpWebResponse resp, string fallback)
         {
             var r = new HttpResult();
@@ -403,12 +447,13 @@ namespace CXXYNet
 
         bool TestOnline()
         {
-            var r1 = Fetch("http://connect.rom.miui.com/generate_204", null, null, 6000);
+            // 绕过系统代理做未认证探测，避免系统代理把“未认证”误判成“已上网”。
+            var r1 = FetchRaw("http://connect.rom.miui.com/generate_204", null, 5000);
             if (r1.Status == 204) return true;
-            var r2 = Fetch("http://www.msftconnecttest.com/connecttest.txt", null, null, 6000);
+            var r2 = FetchRaw("http://www.msftconnecttest.com/connecttest.txt", null, 5000);
             if (r2.Success && r2.Body.Contains("Microsoft Connect Test")) return true;
-            var r3 = Fetch("https://www.baidu.com/", null, null, 6000);
-            if (r3.Success && r3.Body.Length > 0) return true;
+            var r3 = FetchRaw("http://www.baidu.com/", null, 5000);
+            if (r3.Success && r3.Body.Length > 200) return true;
             return false;
         }
 
@@ -441,6 +486,98 @@ namespace CXXYNet
         }
 
         string UrlEncode(string s) { return Uri.EscapeDataString(s ?? ""); }
+
+        // ---------------- Dr.COM ePortal 直连（对齐 fix/windows-runtime） ----------------
+        static string TsMs() { return DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString(); }
+
+        string IspSuffix(string isp)
+        {
+            if (!string.IsNullOrEmpty(isp))
+            {
+                if (isp.IndexOf("电信", StringComparison.OrdinalIgnoreCase) >= 0) return "@dianxin";
+                if (isp.IndexOf("移动", StringComparison.OrdinalIgnoreCase) >= 0) return "@cmcc";
+                if (isp.IndexOf("联通", StringComparison.OrdinalIgnoreCase) >= 0) return "@unicom";
+            }
+            return "@xyw"; // 校园内网
+        }
+
+        string ParseJsonp(string body)
+        {
+            if (string.IsNullOrWhiteSpace(body)) return null;
+            string b = body.Trim();
+            if (b.StartsWith("\uFEFF")) b = b.Substring(1);
+            b = b.Trim();
+            if (b.StartsWith("{")) return b;
+            int op = b.IndexOf('(');
+            int cl = b.LastIndexOf(')');
+            if (op > 0 && cl > op)
+            {
+                string inner = b.Substring(op + 1, cl - op - 1).Trim();
+                if (inner.EndsWith(";")) inner = inner.Substring(0, inner.Length - 1).Trim();
+                return inner;
+            }
+            return null;
+        }
+
+        string JStr(Dictionary<string, object> o, params string[] keys)
+        {
+            if (o == null) return "";
+            foreach (var k in keys)
+            {
+                object v;
+                if (o.TryGetValue(k, out v) && v != null && v.ToString() != "") return v.ToString();
+            }
+            return "";
+        }
+
+        bool DrcomLogin(string user, string pass, string isp, out string detail)
+        {
+            detail = "";
+            try
+            {
+                // 1) chkstatus：先问网关拿本终端真实的 IP / MAC / AC 信息
+                string statusUrl = DrcomStatusUrl + "?callback=" + DrcomCallback + "&v=" + TsMs();
+                var st = FetchRaw(statusUrl, null, 5000);
+                string stJson = ParseJsonp(st.Body);
+                if (stJson == null) { detail = "网关无响应(chkstatus)：" + (st.Body ?? ""); return false; }
+                var so = json.Deserialize<Dictionary<string, object>>(stJson);
+
+                string res = JStr(so, "result", "online");
+                if (res == "1") { detail = "网关报告本终端已在线"; return true; }
+
+                string ip = JStr(so, "v46ip", "v4ip", "userip", "user_ip", "wlan_user_ip");
+                string mac = JStr(so, "wlan_user_mac", "mac");
+                string acIp = JStr(so, "wlan_ac_ip", "ac_ip"); if (acIp == "") acIp = DefaultAcIp;
+                string acName = JStr(so, "wlan_ac_name", "acname"); if (acName == "") acName = DefaultAcName;
+                string ipv6 = JStr(so, "wlan_user_ipv6", "myv6ip");
+                if (ip == "") { detail = "chkstatus 未返回本机 IP"; return false; }
+
+                // 2) 用网关给的参数直接登录
+                string acct = (user ?? "").Trim() + IspSuffix(isp);
+                string qs = "c=Portal&a=login&callback=" + DrcomCallback
+                          + "&login_method=1"
+                          + "&user_account=" + UrlEncode(acct)
+                          + "&user_password=" + UrlEncode(pass ?? "")
+                          + "&wlan_user_ip=" + UrlEncode(ip)
+                          + "&wlan_user_ipv6=" + UrlEncode(ipv6)
+                          + "&wlan_user_mac=" + UrlEncode(mac)
+                          + "&wlan_ac_ip=" + UrlEncode(acIp)
+                          + "&wlan_ac_name=" + UrlEncode(acName)
+                          + "&jsVersion=3.3.3&v=" + TsMs();
+                string loginUrl = DrcomActionUrl + "?" + qs;
+                var lr = FetchRaw(loginUrl, statusUrl, 8000);
+                string lrJson = ParseJsonp(lr.Body);
+                if (lrJson == null) { detail = "登录响应解析失败: " + (lr.Body ?? ""); return false; }
+                var lo = json.Deserialize<Dictionary<string, object>>(lrJson);
+                string lres = JStr(lo, "result");
+                if (lres == "1") { detail = "Dr.COM 认证成功"; return true; }
+                string ret = JStr(lo, "ret_code");
+                string msg = JStr(lo, "msg", "message", "ret_msg");
+                detail = "认证被拒绝" + (msg != "" ? ("：" + msg) : "") + (ret != "" ? (" (ret_code=" + ret + ")") : "");
+                return false;
+            }
+            catch (Exception ex) { detail = "DrCOM 异常: " + ex.Message; return false; }
+        }
 
         bool SubmitForm(HttpResult portal, string user, string pass, string isp, out string detail)
         {
@@ -557,18 +694,23 @@ namespace CXXYNet
                 string ip = Query(portal.FinalUrl, "wlan_user_ip"); if (ip == "") ip = lan[0];
                 string mac = Query(portal.FinalUrl, "wlan_user_mac"); if (mac == "") mac = lan[1];
                 string ac = Query(portal.FinalUrl, "wlan_ac_ip");
-                string q = "c=Portal&a=login&callback=dr1003&login_method=1&user_account=" + UrlEncode(user) +
+                string q = "c=Portal&a=login&callback=dr1&login_method=1&user_account=" + UrlEncode(user) +
                            "&user_password=" + UrlEncode(pass) + "&wlan_user_ip=" + UrlEncode(ip) +
                            "&wlan_user_ipv6=&wlan_user_mac=" + UrlEncode(mac) + "&wlan_ac_ip=" + UrlEncode(ac) +
-                           "&wlan_ac_name=&jsVersion=3.3.3&v=10000";
+                           "&wlan_ac_name=&jsVersion=3.3.3&v=" + TsMs();
                 foreach (var port in new[] { 801, 80, 8080 })
                 {
                     string url = "http://" + b.Host + ":" + port + "/eportal/?" + q;
-                    var r = Fetch(url, null, portal.FinalUrl, 10000);
-                    if (r.Body.Contains("\"result\":\"1\"") || Regex.IsMatch(r.Body, "result[\"']?\\s*[:=]\\s*[\"']?1"))
+                    var r = FetchRaw(url, portal.FinalUrl, 10000);
+                    string j = ParseJsonp(r.Body);
+                    if (j != null)
                     {
-                        detail = "Dr.COM ePortal 登录成功 (端口 " + port + ")";
-                        return true;
+                        var o = json.Deserialize<Dictionary<string, object>>(j);
+                        if (JStr(o, "result") == "1")
+                        {
+                            detail = "Dr.COM ePortal 登录成功 (端口 " + port + ")";
+                            return true;
+                        }
                     }
                 }
             }
@@ -620,6 +762,18 @@ namespace CXXYNet
 
             bool online = await Task.Run(() => TestOnline());
             if (online) { Log("当前已通过认证，可直接上网", "ok"); Status("ok", "已通过认证，可正常上网"); Result(); return; }
+
+            // 优先：Dr.COM ePortal 直连（绕过系统代理，参考 fix/windows-runtime）
+            Status("busy", "正在直连网关认证…");
+            string drDetail = "";
+            bool drOk = await Task.Run(() => DrcomLogin(user, pass, isp, out drDetail));
+            Log(drDetail, drOk ? "ok" : "err");
+            if (drOk)
+            {
+                await Task.Delay(1500);
+                online = await Task.Run(() => TestOnline());
+                if (online) { Log("自动登录成功，网络已通", "ok"); Status("ok", "登录成功，可正常上网"); Result(); return; }
+            }
 
             Log("获取认证页面 …");
             var portal = await Task.Run(() => GetPortalPage());
