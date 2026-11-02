@@ -1,4 +1,4 @@
-﻿#Requires -Version 5.1
+#Requires -Version 5.1
 <#
     东南大学成贤学院 Student_CX 校园网 Windows 一键连接 / 自动登录工具
 
@@ -14,6 +14,11 @@
         默认不保存密码；只有勾选「本机加密保存」后，才会用 Windows DPAPI
         （当前登录用户账户级加密）存到 %APPDATA%\CXXY-CampusNet\cred.bin，
         不会以明文写入任何脚本、配置或日志。
+
+    2026-11-02 更新：登录流程对齐计算机协会 SEUCXCS/wlan-auto-login 的 fix/windows-runtime 分支
+      - 直连 Dr.COM 网关 172.18.254.6：先 chkstatus 拿真实 IP/MAC/AC，再 eportal 登录
+      - 所有网关请求显式 $req.Proxy = $null 绕过 Windows 系统代理（Clash/VPN 开着时这是必须的）
+      - callback 改为 dr1，v 用毫秒时间戳，账号自动加 @xyw/@dianxin/@cmcc 后缀
 #>
 [CmdletBinding()]
 param(
@@ -32,6 +37,13 @@ $script:LogSink = $null
 $script:UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36'
 $script:ConfigDir = Join-Path $env:APPDATA 'CXXY-CampusNet'
 $script:CredFile = Join-Path $script:ConfigDir 'cred.bin'
+
+# Dr.COM ePortal 网关（与 fix/windows-runtime 保持一致）
+$script:DrcomStatusUrl = 'http://172.18.254.6/drcom/chkstatus'
+$script:DrcomActionUrl = 'http://172.18.254.6:801/eportal/'
+$script:DrcomCallback  = 'dr1'
+$script:DefaultAcIp   = '172.18.255.6'
+$script:DefaultAcName = 'NAS'
 
 try {
     [Net.ServicePointManager]::SecurityProtocol =
@@ -122,22 +134,38 @@ function Test-Tcp {
     }
 }
 
+# 绕过系统代理的原始 GET（PS5.1 没有 Invoke-WebRequest -NoProxy，故用 HttpWebRequest 并显式 Proxy=$null）
+function Get-Raw {
+    param([string]$Url, [int]$TimeoutMs = 8000)
+    $r = [pscustomobject]@{ Status = 0; Body = ''; Ok = $false }
+    try {
+        $req = [Net.HttpWebRequest]::Create($Url)
+        $req.UserAgent = $script:UA
+        $req.Timeout = $TimeoutMs
+        $req.ReadWriteTimeout = $TimeoutMs
+        $req.Proxy = $null               # 关键：绕过 Windows 系统代理
+        $req.AllowAutoRedirect = $false  # JSONP 响应不跳转
+        try { $resp = $req.GetResponse() }
+        catch [Net.WebException] {
+            if ($_.Exception.Response) { $resp = $_.Exception.Response } else { throw }
+        }
+        $r.Status = [int]$resp.StatusCode
+        $sr = New-Object IO.StreamReader($resp.GetResponseStream(), [Text.Encoding]::UTF8)
+        $r.Body = $sr.ReadToEnd()
+        $r.Ok = $true
+        $sr.Close(); $resp.Close()
+    } catch { }
+    return $r
+}
+
 function Test-Online {
-    $checks = @(
-        @{ Url = 'http://captive.apple.com/hotspot-detect.html'; Needle = 'Success' },
-        @{ Url = 'http://www.msftconnecttest.com/connecttest.txt'; Needle = 'Microsoft Connect Test' },
-        @{ Url = 'https://www.baidu.com/'; Needle = '' }
-    )
-    foreach ($ch in $checks) {
-        try {
-            $r = Invoke-WebRequest -Uri $ch.Url -UseBasicParsing -TimeoutSec 6 -MaximumRedirection 5 -ErrorAction Stop -Headers @{ 'User-Agent' = $script:UA }
-            if ($r.StatusCode -eq 200) {
-                if ($ch.Needle -eq '' -or [string]$r.Content -match [regex]::Escape($ch.Needle)) {
-                    return $true
-                }
-            }
-        } catch { }
-    }
+    # 绕过系统代理做未认证探测，避免系统代理把“未认证”误判成“已上网”
+    $r1 = Get-Raw -Url 'http://connect.rom.miui.com/generate_204' -TimeoutMs 5000
+    if ($r1.Status -eq 204) { return $true }
+    $r2 = Get-Raw -Url 'http://www.msftconnecttest.com/connecttest.txt' -TimeoutMs 5000
+    if ($r2.Ok -and $r2.Body -match 'Microsoft Connect Test') { return $true }
+    $r3 = Get-Raw -Url 'http://www.baidu.com/' -TimeoutMs 5000
+    if ($r3.Ok -and $r3.Body.Length -gt 200) { return $true }
     return $false
 }
 
@@ -281,8 +309,78 @@ function Get-QueryValue {
     return (Get-Regex1 -InputString $Uri -Pattern ('(?i)[?&]' + [regex]::Escape($Key) + '=([^&]*)'))
 }
 
+# ---------- Dr.COM ePortal 直连（对齐 fix/windows-runtime） ----------
+function Get-IspSuffix {
+    param([string]$Isp)
+    if ($Isp -match '电信') { return '@dianxin' }
+    if ($Isp -match '移动') { return '@cmcc' }
+    if ($Isp -match '联通') { return '@unicom' }
+    return '@xyw'
+}
+
+function ConvertFrom-Jsonp {
+    param([string]$Body)
+    if ([string]::IsNullOrWhiteSpace($Body)) { return $null }
+    $b = $Body.Trim()
+    if ($b.StartsWith([char]0xFEFF)) { $b = $b.Substring(1) }
+    $b = $b.Trim()
+    if ($b.StartsWith('{')) {
+        try { return ($b | ConvertFrom-Json) } catch { return $null }
+    }
+    $op = $b.IndexOf('('); $cl = $b.LastIndexOf(')')
+    if ($op -ge 0 -and $cl -gt $op) {
+        $inner = $b.Substring($op + 1, $cl - $op - 1).Trim().TrimEnd(';').Trim()
+        try { return ($inner | ConvertFrom-Json) } catch { return $null }
+    }
+    return $null
+}
+
+function Invoke-DrcomLogin {
+    param([string]$User, [string]$Pass, [string]$Isp)
+    try {
+        # 1) chkstatus：从网关拿本终端真实的 IP / MAC / AC
+        $ts = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds().ToString()
+        $statusUrl = "$($script:DrcomStatusUrl)?callback=$($script:DrcomCallback)&v=$ts"
+        $st = Get-Raw -Url $statusUrl -TimeoutMs 5000
+        $so = ConvertFrom-Jsonp -Body $st.Body
+        if (-not $so) { return [pscustomobject]@{ Ok = $false; Detail = '网关无响应(chkstatus)' } }
+
+        if ("$($so.result)" -eq '1') { return [pscustomobject]@{ Ok = $true; Detail = '网关报告本终端已在线' } }
+
+        $ip = $so.v46ip; if (-not $ip) { $ip = $so.v4ip }; if (-not $ip) { $ip = $so.userip }
+        $mac = $so.wlan_user_mac
+        $acIp = $so.wlan_ac_ip; if (-not $acIp) { $acIp = $script:DefaultAcIp }
+        $acName = $so.wlan_ac_name; if (-not $acName) { $acName = $script:DefaultAcName }
+        $ipv6 = $so.wlan_user_ipv6
+        if (-not $ip) { return [pscustomobject]@{ Ok = $false; Detail = 'chkstatus 未返回本机 IP' } }
+
+        # 2) 用网关给的参数直接登录
+        $acct = $User.Trim() + (Get-IspSuffix $Isp)
+        $qs = 'c=Portal&a=login&callback=' + $script:DrcomCallback +
+              '&login_method=1' +
+              '&user_account=' + [uri]::EscapeDataString($acct) +
+              '&user_password=' + [uri]::EscapeDataString($Pass) +
+              '&wlan_user_ip=' + [uri]::EscapeDataString($ip) +
+              '&wlan_user_ipv6=' + [uri]::EscapeDataString($ipv6) +
+              '&wlan_user_mac=' + [uri]::EscapeDataString($mac) +
+              '&wlan_ac_ip=' + [uri]::EscapeDataString($acIp) +
+              '&wlan_ac_name=' + [uri]::EscapeDataString($acName) +
+              '&jsVersion=3.3.3&v=' + [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
+        $loginUrl = "$($script:DrcomActionUrl)?$qs"
+        $lr = Get-Raw -Url $loginUrl -TimeoutMs 8000
+        $lo = ConvertFrom-Jsonp -Body $lr.Body
+        if (-not $lo) { return [pscustomobject]@{ Ok = $false; Detail = '登录响应解析失败' } }
+        if ("$($lo.result)" -eq '1') { return [pscustomobject]@{ Ok = $true; Detail = 'Dr.COM 认证成功' } }
+        $msg = $lo.msg; if (-not $msg) { $msg = $lo.ret_msg }
+        return [pscustomobject]@{ Ok = $false; Detail = ("认证被拒绝: " + $msg + " (ret_code=" + $lo.ret_code + ")") }
+    } catch {
+        return [pscustomobject]@{ Ok = $false; Detail = ('DrCOM 异常: ' + $_.Exception.Message) }
+    }
+}
+
 function Invoke-DrcomEportal {
     param([object]$Portal, [string]$User, [string]$Pass)
+    # 旧的兜底分支：从认证页 URL 里提取参数，逐个端口试
     $b = [uri]$Portal.Uri
     $net = Get-LocalNetwork
     $ip = Get-QueryValue -Uri $Portal.Uri -Key 'wlan_user_ip'
@@ -290,18 +388,16 @@ function Invoke-DrcomEportal {
     $mac = Get-QueryValue -Uri $Portal.Uri -Key 'wlan_user_mac'
     if (-not $mac) { $mac = $net.Mac }
     $ac = Get-QueryValue -Uri $Portal.Uri -Key 'wlan_ac_ip'
-    $q = 'c=Portal&a=login&callback=dr1003&login_method=1&user_account={0}&user_password={1}&wlan_user_ip={2}&wlan_user_ipv6=&wlan_user_mac={3}&wlan_ac_ip={4}&wlan_ac_name=&jsVersion=3.3.3&v=10000' -f `
-        [uri]::EscapeDataString($User), [uri]::EscapeDataString($Pass), $ip, $mac, $ac
+    $q = 'c=Portal&a=login&callback=dr1&login_method=1&user_account={0}&user_password={1}&wlan_user_ip={2}&wlan_user_ipv6=&wlan_user_mac={3}&wlan_ac_ip={4}&wlan_ac_name=&jsVersion=3.3.3&v={5}' -f `
+        [uri]::EscapeDataString($User), [uri]::EscapeDataString($Pass), $ip, $mac, $ac, `
+        [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
     foreach ($port in @(801, 80, 8080)) {
         $url = 'http://{0}:{1}/eportal/?{2}' -f $b.Host, $port, $q
-        try {
-            $r = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 10 -MaximumRedirection 0 -ErrorAction Stop `
-                -Headers @{ 'User-Agent' = $script:UA; 'Referer' = $Portal.Uri }
-            $txt = [string]$r.Content
-            if ($txt -match 'result["'']?\s*[:=]\s*["'']?1') {
-                return [pscustomobject]@{ Ok = $true; Detail = "Dr.COM ePortal 登录成功 (端口 $port)"; Content = $txt }
-            }
-        } catch { }
+        $r = Get-Raw -Url $url -TimeoutMs 10000
+        $j = ConvertFrom-Jsonp -Body $r.Body
+        if ($j -and "$($j.result)" -eq '1') {
+            return [pscustomobject]@{ Ok = $true; Detail = "Dr.COM ePortal 登录成功 (端口 $port)"; Content = $r.Body }
+        }
     }
     return [pscustomobject]@{ Ok = $false; Detail = 'Dr.COM ePortal 接口尝试未成功'; Content = '' }
 }
@@ -326,7 +422,7 @@ function Invoke-AutoLogin {
     $deadline = (Get-Date).AddSeconds(30)
     $gwOk = $false
     while ((Get-Date) -lt $deadline) {
-        if ((Test-Tcp -HostName '211.65.40.6' -Port 8080 -TimeoutMs 1500) -or
+        if ((Test-Tcp -HostName '172.18.254.6' -Port 80 -TimeoutMs 1500) -or
             (Test-Tcp -HostName '6.6.6.6' -Port 80 -TimeoutMs 1500)) {
             $gwOk = $true
             break
@@ -338,6 +434,16 @@ function Invoke-AutoLogin {
         Write-Log '当前已通过认证，可直接上网'
         return $true
     }
+
+    # 优先：Dr.COM ePortal 直连（绕过系统代理，对齐 fix/windows-runtime）
+    Write-Log '正在直连 Dr.COM 网关认证 ...'
+    $dr = Invoke-DrcomLogin -User $User -Pass $Pass -Isp $Isp
+    Write-Log $dr.Detail
+    if ($dr.Ok) {
+        Start-Sleep -Seconds 2
+        if (Test-Online) { Write-Log '自动登录成功，网络已通'; return $true }
+    }
+
     if (-not $gwOk) {
         Write-Log '网关暂不可达，稍后再试；先为你打开认证页'
         Open-PortalBrowser
